@@ -6,6 +6,8 @@ let loopInterval;
 // Base 10 reference frequencies (ANSI standard)
 const frequencyTable = [31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 
     800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
+const iso80phons = [14.6, 14.6, 14.6, 16.6, 14.4, 11.7, 9.3, 7.0, 5.2, 3.6, 2.0, 0.9, 0.1, -0.6,
+  -1.1, -0.7, 1.7, 3.0, -0.2, -2.9, -3.7, -2.4, 0.9, 6.1, 10.6, 10.9, 4.7, 4.0];
 
 // History of user selections
 const outputdBGain = 0  //output gain to make up gain loss from filters
@@ -63,7 +65,11 @@ function createNoiseBuffer(duration) {
   for (let i = 0; i < bufferSize; i++) {
     data[i] = Math.random() * 2 - 1; // Random value between -1 and 1
   }
-  
+  // de-click start stop
+  for (let i = 0; i < 1000; i++) { 
+    data[i] = i * 0.001 * data[i]
+    data[bufferSize - i] = i * 0.001 * data[bufferSize - i]
+  }
   return buffer;
 }
 
@@ -108,6 +114,7 @@ function createFilteredBuffer(noiseBuffer, frequency) {
   return filteredBuffer
 }
 
+
 // Create a gain node
 function createGain(dbGain) {
   const gain = audioContext.createGain();
@@ -126,9 +133,11 @@ function playFilteredNoise() {
   document.getElementById('play-button').disabled = true;
   document.getElementById('stop-button').disabled = false;
   
-  const loopLength = 1000; // 1 second (2 x 0.5 second sounds)
+  const sampleDuration = 0.5;
+  const loopLength = 2000 * sampleDuration; // 1 second (2 x 0.5 second sounds)
   // Create noise buffer and fixed filter noise
-  const noiseBuffer = createNoiseBuffer(0.5);
+  const noiseBuffer = createNoiseBuffer(sampleDuration*0.96);
+  const fixedFilterBuffer = createFilteredBuffer(noiseBuffer, 500);
   
   function playSounds() {
     const variableFreqIndex = document.getElementById('frequency-slider').value;
@@ -137,16 +146,17 @@ function playFilteredNoise() {
     
     // Create gain nodes
     const variableDbGain = parseFloat(document.getElementById('amplitude-slider').value);
-    const variableGain = createGain(variableDbGain + pinkNoiseGain + outputdBGain);
+    const playbackGain = variableDbGain + pinkNoiseGain + iso80phons[variableFreqIndex];
+    const variableGain = createGain(playbackGain + outputdBGain);
     const fixedGain = createGain(outputdBGain); // Fixed gain
     
     // Create variable noise source
     const variableSource = audioContext.createBufferSource();
     variableSource.buffer = createFilteredBuffer(noiseBuffer, variableFreq);
     const fixedSource = audioContext.createBufferSource();
-    fixedSource.buffer = createFilteredBuffer(noiseBuffer, 500);
+    fixedSource.buffer = fixedFilterBuffer;
     
-    // Connect variable frequency path
+    // Connect variable frequency paths
     variableSource.connect(variableGain);
     variableGain.connect(audioContext.destination);
 
@@ -157,9 +167,9 @@ function playFilteredNoise() {
     // Start sounds
     const currentTime = audioContext.currentTime;
     variableSource.start(currentTime);
-    variableSource.stop(currentTime + 0.5);
-    fixedSource.start(currentTime + 0.5);
-    fixedSource.stop(currentTime + 1.0);
+    variableSource.stop(currentTime + sampleDuration);
+    fixedSource.start(currentTime + sampleDuration);
+    fixedSource.stop(currentTime + 2*sampleDuration);
   }
   
   // Play immediately
@@ -214,10 +224,7 @@ function saveHistory() {
 
 
 // Initialize the app ---------- 
-function init() {
-  // Generate frequency table using standard 1/3 octave bands
-  // frequencyTable = generateThirdOctaveBands();
-  
+function init() {  
   // Set up frequency slider
   const freqSlider = document.getElementById('frequency-slider');
   const freqValue = document.getElementById('frequency-value');
@@ -225,15 +232,28 @@ function init() {
   // Create frequency tick marks
   createFrequencyTicks();
 
+  // Function to update amplitude slider state
+  function updateAmpSliderState(freq) {
+    if (freq == 500) {
+      ampSlider.disabled = true;
+      ampSlider.style.opacity = '0.5'; // Optional: visual feedback
+    } else {
+      ampSlider.disabled = false;
+      ampSlider.style.opacity = '1';
+    }
+  }
+
   freqSlider.addEventListener('input', () => {
     const freq = sliderToFreq(freqSlider.value);
     freqValue.textContent = `${freq} Hz`;
     // recall amplitude from table
     ampSlider.value = amplitudeHistory[freqSlider.value]
     ampValue.textContent = `${ampSlider.value} dB`;
+    // update AmpSlider
+    updateAmpSliderState(freq);
   });
   
-  // Set initial value to 1kHz or closest available
+  // Set initial value to 1kHz
   freqSlider.value = freqToSlider(1000);
   freqValue.textContent = "1000 Hz"
 
@@ -242,17 +262,17 @@ function init() {
   const ampValue = document.getElementById('amplitude-value');
   
   ampSlider.addEventListener('input', () => {
-    ampValue.textContent = `${ampSlider.value} dB`;
-    // console.info("freq %d: %d", freqSlider.value, ampSlider.value)
-    amplitudeHistory[freqSlider.value] = ampSlider.value
+    if (!ampSlider.disabled){
+      ampValue.textContent = `${ampSlider.value} dB`;
+      // console.info("freq %d: %d", freqSlider.value, ampSlider.value)
+      amplitudeHistory[freqSlider.value] = ampSlider.value
+    }
   });
   
   // Set up buttons
   document.getElementById('play-button').addEventListener('click', playFilteredNoise);
   document.getElementById('stop-button').addEventListener('click', stopAudio);
   document.getElementById('save-history').addEventListener('click', () => {
-    //amplitudeHistory.length = 0;
-    //updateHistoryDisplay();
     saveHistory();
   });
 }
