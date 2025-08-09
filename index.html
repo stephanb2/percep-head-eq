@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Frequency Response Test</title>
   <script src="./fili.min.js"></script>
-  <script src="./iirfilter03.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="./iirfilter04.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -17,11 +18,12 @@
     }
     h1 {
       text-align: center;
-      color: #2c3e50;
+      color: #2c2e50;
+      font-size: 1.5em;
     }
     .controls {
       background-color: white;
-      padding: 20px;
+      padding: 10px 20px;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       margin-bottom: 20px;
@@ -37,14 +39,14 @@
     .slider-value {
       display: inline-block;
       font-size: 11pt;
-      min-width: 80px;
+      min-width: 70px;
       text-align: right;
       margin-left: 4px;
     }
     .buttons {
       display: flex;
       justify-content: space-between;
-      margin: 20px 0;
+      margin: 10px 0;
     }
     button {
       background-color: #3498db;
@@ -84,13 +86,13 @@
       border-radius: 4px;
     }
     input[type="range"] {
-      width: 80%;
+      width: 85%;
       vertical-align: middle;
     }
     datalist {
       display: flex;
       justify-content: space-between;
-      width: 80%;
+      width: 85%;
       margin: 5px 0;
     }
     datalist option {
@@ -100,9 +102,10 @@
   </style>
 </head>
 <body>
-  <h1>Frequency Response Test</h1>
+  <!--<h1>Frequency Response Test</h1>-->
   
   <div class="controls">
+    <h3>Frequency Response Test</h3>
     <div class="slider-container">
       <label for="frequency-slider">Center Frequency:</label>
       <input type="range" id="frequency-slider" min="0" max="27" value="2" step="1" list="frequency-ticks">
@@ -125,9 +128,10 @@
       <button id="save-history">Save Table</button>
     </div>
   </div>
-  
+
   <div class="history">
-    <h2>Amplitude Table</h2>
+    <canvas id="history-plot" width="500" height="250"></canvas>
+    <h3>Amplitude Table</h3>
     <pre id="history-list"></pre>
   </div>
 

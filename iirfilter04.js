@@ -2,6 +2,8 @@
 let audioContext;
 let isPlaying = false;
 let loopInterval;
+// chart.js context
+let historyChart = null;
 
 // Base 10 reference frequencies (ANSI standard)
 const frequencyTable = [31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 
@@ -55,6 +57,14 @@ function createFrequencyTicks() {
 }
 
 // Audio processing -------- 
+function deClick(data, nsamp) {
+  bufferSize = data.length
+  for (let i = 0; i < nsamp; i++) { 
+    data[i] = i / nsamp * data[i]
+    data[bufferSize - i] = i / nsamp * data[bufferSize - i]
+  }
+}
+
 // Create white noise buffer
 function createNoiseBuffer(duration) {
   const sampleRate = audioContext.sampleRate;
@@ -65,15 +75,10 @@ function createNoiseBuffer(duration) {
   for (let i = 0; i < bufferSize; i++) {
     data[i] = Math.random() * 2 - 1; // Random value between -1 and 1
   }
-  // de-click start stop
-  for (let i = 0; i < 1000; i++) { 
-    data[i] = i * 0.001 * data[i]
-    data[bufferSize - i] = i * 0.001 * data[bufferSize - i]
-  }
   return buffer;
 }
 
-function createFiliFilter(frequency) {
+function createFiliFilter_old(frequency) {
   const sampleRate = audioContext.sampleRate;
   //  Instance of a filter coefficient calculator
   var iirCalculator = new Fili.CalcCascades();
@@ -95,23 +100,83 @@ function createFiliFilter(frequency) {
   return iirFilter
 }
 
-function createFilteredBuffer(noiseBuffer, frequency) {
-  const iirFilter = createFiliFilter(frequency)
+function createFilteredBuffer_old(noiseBuffer, frequency) {
+  const iirFilter = createFiliFilter_old(frequency)
 
   // Get original audio data
   const origData = noiseBuffer.getChannelData(0);
 
-  // Create new buffer for filtered data
-  const filteredBuffer = audioContext.createBuffer(1, noiseBuffer.length, audioContext.sampleRate);
-  const filteredData = filteredBuffer.getChannelData(0);
-
   // Apply filter
   const filteredValues = iirFilter.multiStep(Array.from(origData));
+  //const filteredValues = iirFilter.multiStep(filteredValues01);
+
+  // Create new buffer for filtered data
+  const filteredBuffer = audioContext.createBuffer(1, filteredValues.length, audioContext.sampleRate);
+  const filteredData = filteredBuffer.getChannelData(0);
+  // de-click start stop
+  deClick(filteredValues, 720)
   // Copy filtered values to buffer
   for (let i = 0; i < filteredValues.length; i++) {
     filteredData[i] = filteredValues[i];
   }
   return filteredBuffer
+}
+
+
+function createFiliFilter(frequency) {
+  const sampleRate = audioContext.sampleRate;
+  const iirCalculator = new Fili.CalcCascades();
+
+  // 1/3 octave band cutoffs
+  const k = Math.pow(2, 1/6);
+  const f_lower = frequency / k;
+  const f_upper = frequency * k;
+
+  // Calculate highpass and lowpass coefficients
+  const hpCoeffs = iirCalculator.highpass({
+    order: 12, // 12th order filter
+    characteristic: 'butterworth',
+    Fs: sampleRate,
+    Fc: f_lower
+  });
+  const lpCoeffs = iirCalculator.lowpass({
+    order: 12,
+    characteristic: 'butterworth',
+    Fs: sampleRate,
+    Fc: f_upper
+  });
+
+  // Create filter instances
+  const hpFilter = new Fili.IirFilter(hpCoeffs);
+  const lpFilter = new Fili.IirFilter(lpCoeffs);
+
+  // Return a function that applies both filters in series
+  return function(samples) {
+    return lpFilter.multiStep(hpFilter.multiStep(samples));
+  };
+}
+
+function createFilteredBuffer(noiseBuffer, frequency) {
+  const filterFunc = createFiliFilter(frequency);
+
+  // Get original audio data
+  const origData = noiseBuffer.getChannelData(0);
+
+  // Apply filters in series
+  const filteredValues = filterFunc(Array.from(origData));
+
+  // Create new buffer for filtered data
+  const filteredBuffer = audioContext.createBuffer(1, filteredValues.length, audioContext.sampleRate);
+  const filteredData = filteredBuffer.getChannelData(0);
+
+  // de-click start stop
+  deClick(filteredValues, 720);
+
+  // Copy filtered values to buffer
+  for (let i = 0; i < filteredValues.length; i++) {
+    filteredData[i] = filteredValues[i];
+  }
+  return filteredBuffer;
 }
 
 
@@ -136,10 +201,12 @@ function playFilteredNoise() {
   const sampleDuration = 0.5;
   const loopLength = 2000 * sampleDuration; // 1 second (2 x 0.5 second sounds)
   // Create noise buffer and fixed filter noise
-  const noiseBuffer = createNoiseBuffer(sampleDuration*0.96);
+  const noiseBuffer = createNoiseBuffer(sampleDuration);
   const fixedFilterBuffer = createFilteredBuffer(noiseBuffer, 500);
   
   function playSounds() {
+    if (!isPlaying) return;
+
     const variableFreqIndex = document.getElementById('frequency-slider').value;
     const variableFreq = sliderToFreq(variableFreqIndex)
     const pinkNoiseGain = frequencyTable.indexOf(500) - variableFreqIndex
@@ -167,28 +234,21 @@ function playFilteredNoise() {
     // Start sounds
     const currentTime = audioContext.currentTime;
     variableSource.start(currentTime);
-    variableSource.stop(currentTime + sampleDuration);
     fixedSource.start(currentTime + sampleDuration);
-    fixedSource.stop(currentTime + 2*sampleDuration);
+
+    // Schedule next loop on fixedSource end
+    fixedSource.onended = function() {
+      if (isPlaying) playSounds();
+    };
   }
-  
+
   // Play immediately
   playSounds();
-  
-  // Set up loop
-  loopInterval = setInterval(() => {
-    if (isPlaying) {
-      playSounds();
-    } else {
-      clearInterval(loopInterval);
-    }
-  }, loopLength);
 }
 
 // Stop playing audio
 function stopAudio() {
   isPlaying = false;
-  clearInterval(loopInterval);
   
   // Update history display
   updateHistoryDisplay();
@@ -197,14 +257,52 @@ function stopAudio() {
   document.getElementById('stop-button').disabled = true;
 }
 
+
+// Plot frequency response
+function drawHistoryPlot() {
+  const ctx = document.getElementById('history-plot').getContext('2d');
+  const labels = amplitudeHistory.map((_, idx) => sliderToFreq(idx));
+  const data = amplitudeHistory;
+
+  if (!historyChart) {
+    historyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Level dB',
+          data: data,
+          borderColor: 'rgba(0, 64, 128, 0.66)',
+          fill: false,
+          pointRadius: 2,
+          tension: 0.3
+        }]
+      },
+      options: {
+        scales: {
+          x: {title: {display: true, text: 'Frequency (Hz)' }},
+          y: {title: {display: true, text: 'Level (dB)', suggestedMin: -12, suggestedMax: 12 }}
+        }
+      }
+    });
+  } else {
+    historyChart.data.labels = labels;
+    historyChart.data.datasets[0].data = data;
+    historyChart.update();
+  }
+}
+
+
 // Update history display
 function updateHistoryDisplay() {
   const historyList = document.getElementById('history-list');
   historyList.innerHTML = 'freq(Hz)&#09;level(dB)<br />';
   
   amplitudeHistory.forEach((value, index) => {
-    historyList.innerHTML += `${sliderToFreq(index)}&#09;${value}<br />`
+    historyList.innerHTML += `${sliderToFreq(index)}&#09;${-value}<br />`
   });
+
+  drawHistoryPlot();
 }
 
 
@@ -224,7 +322,7 @@ function saveHistory() {
 
 
 // Initialize the app ---------- 
-function init() {  
+function init() {
   // Set up frequency slider
   const freqSlider = document.getElementById('frequency-slider');
   const freqValue = document.getElementById('frequency-value');
