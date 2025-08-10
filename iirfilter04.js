@@ -7,12 +7,16 @@ let historyChart = null;
 
 // Base 10 reference frequencies (ANSI standard)
 const frequencyTable = [31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 
-    800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
-const iso80phons = [14.6, 14.6, 14.6, 16.6, 14.4, 11.7, 9.3, 7.0, 5.2, 3.6, 2.0, 0.9, 0.1, -0.6,
-  -1.1, -0.7, 1.7, 3.0, -0.2, -2.9, -3.7, -2.4, 0.9, 6.1, 10.6, 10.9, 4.7, 4.0];
+  800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
+const iso80phonsAlt = [22.8, 21.4, 20.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
+  -1.2, -0.9, 1.6, 2.8, -0.3, -3.0, -3.8, -2.6, 0.7, 5.9, 10.5, 10.8, 4.5, 3.8];
+const iso80phons = [28.8, 24.4, 20.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
+  -1.2, -0.9, 1.6, 2.8, -0.3, -3.0, -3.8, -2.6, 0.7, 5.9, 10.5, 10.8, 4.5, 3.8];
+const houseCurveHarman = [6.4, 6.4, 6.2, 5.9, 5, 3.8, 2.6, 1.5, 0.9, 0.7, 0.5, 0.4, 0.3, 0.3, 
+  0.1, 0, -0.1, -0.3, -0.4, -0.5, -0.7, -0.9, -1, -1.2, -1.4, -1.6, -1.9, -2.2]
 
 // History of user selections
-const outputdBGain = 0  //output gain to make up gain loss from filters
+const outputdBGain = -8 //output gain to prevent clipping
 const amplitudeHistory = Array(frequencyTable.length).fill(0);
 
 
@@ -66,6 +70,14 @@ function deClick(data, nsamp) {
 }
 
 // Create white noise buffer
+function approxGaussianRand(nsamp = 6) {
+  var rand = 0;
+  for (var i = 0; i < nsamp; i += 1) {
+    rand += Math.random();
+  }
+  return rand / nsamp * 2 - 1.0;
+}
+
 function createNoiseBuffer(duration) {
   const sampleRate = audioContext.sampleRate;
   const bufferSize = sampleRate * duration;
@@ -73,12 +85,16 @@ function createNoiseBuffer(duration) {
   const data = buffer.getChannelData(0);
   
   for (let i = 0; i < bufferSize; i++) {
-    data[i] = Math.random() * 2 - 1; // Random value between -1 and 1
+    // avoid Gaussian: higher crest factor
+    // data[i] = approxGaussianRand();
+    rand = Math.random() * 2 - 1;
+    // reduce crest factor
+    data[i] = Math.tanh(rand * 4);
   }
   return buffer;
 }
 
-function createFiliFilter_old(frequency) {
+function createBandpassFilter(frequency) {
   const sampleRate = audioContext.sampleRate;
   //  Instance of a filter coefficient calculator
   var iirCalculator = new Fili.CalcCascades();
@@ -100,8 +116,8 @@ function createFiliFilter_old(frequency) {
   return iirFilter
 }
 
-function createFilteredBuffer_old(noiseBuffer, frequency) {
-  const iirFilter = createFiliFilter_old(frequency)
+function createBandpassBuffer(noiseBuffer, frequency) {
+  const iirFilter = createBandpassFilter(frequency)
 
   // Get original audio data
   const origData = noiseBuffer.getChannelData(0);
@@ -156,10 +172,11 @@ function createFiliFilter(frequency) {
   };
 }
 
+
 function createFilteredBuffer(noiseBuffer, frequency) {
   const filterFunc = createFiliFilter(frequency);
 
-  // Get original audio data
+  // Get white noise data
   const origData = noiseBuffer.getChannelData(0);
 
   // Apply filters in series
@@ -190,6 +207,7 @@ function createGain(dbGain) {
 
 // Play filtered noise --------------
 function playFilteredNoise() {
+  testMode = 2;
   if (audioContext === undefined) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
@@ -198,8 +216,7 @@ function playFilteredNoise() {
   document.getElementById('play-button').disabled = true;
   document.getElementById('stop-button').disabled = false;
   
-  const sampleDuration = 0.5;
-  const loopLength = 2000 * sampleDuration; // 1 second (2 x 0.5 second sounds)
+  const sampleDuration = 0.9;
   // Create noise buffer and fixed filter noise
   const noiseBuffer = createNoiseBuffer(sampleDuration);
   const fixedFilterBuffer = createFilteredBuffer(noiseBuffer, 500);
@@ -213,7 +230,10 @@ function playFilteredNoise() {
     
     // Create gain nodes
     const variableDbGain = parseFloat(document.getElementById('amplitude-slider').value);
-    const playbackGain = variableDbGain + pinkNoiseGain + iso80phons[variableFreqIndex];
+    let playbackGain = variableDbGain + pinkNoiseGain 
+    if (testMode === 2) { 
+      playbackGain += iso80phons[variableFreqIndex] - houseCurveHarman[variableFreqIndex]
+    };
     const variableGain = createGain(playbackGain + outputdBGain);
     const fixedGain = createGain(outputdBGain); // Fixed gain
     
@@ -233,11 +253,15 @@ function playFilteredNoise() {
 
     // Start sounds
     const currentTime = audioContext.currentTime;
-    variableSource.start(currentTime);
-    fixedSource.start(currentTime + sampleDuration);
+    if (testMode > 0) {
+      variableSource.start(currentTime);
+    } else {
+      fixedSource.start(currentTime);
+      variableSource.start(currentTime + sampleDuration);
+    };
 
     // Schedule next loop on fixedSource end
-    fixedSource.onended = function() {
+    variableSource.onended = function() {
       if (isPlaying) playSounds();
     };
   }
@@ -310,7 +334,7 @@ function updateHistoryDisplay() {
 function saveHistory() {
   var fileContent = "* freq(Hz) level(dB)\n";
   amplitudeHistory.forEach((value, index) => {
-    fileContent += `${sliderToFreq(index)} ${value}\n`
+    fileContent += `${sliderToFreq(index)} ${-value}\n`
   });
 
   var blob = new Blob([fileContent ], { type: 'text/plain' });
@@ -366,6 +390,8 @@ function init() {
       amplitudeHistory[freqSlider.value] = ampSlider.value
     }
   });
+  ampSlider.value = 0;
+  ampSlider.textContent = "0 dB";
   
   // Set up buttons
   document.getElementById('play-button').addEventListener('click', playFilteredNoise);
