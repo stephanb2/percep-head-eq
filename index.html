@@ -6,7 +6,6 @@
   <title>Frequency Response Test</title>
   <script src="./fili.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./iirfilter04.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -132,6 +131,10 @@
       <button id="play-button">Play Audio</button>
       <button id="stop-button" disabled>Stop Audio</button>
       <button id="save-history">Save Table</button>
+      <button>
+        <label for="csv-file-input">Load Table</label>
+        <input type="file" id="csv-file-input" accept="text/csv" style="display:none;"/>
+      </button>
     </div>
   </div>
 
@@ -140,6 +143,6 @@
     <h3>Amplitude Table</h3>
     <pre id="history-list"></pre>
   </div>
-
+  <script src="./iirfilter04.js"></script>
 </body>
 </html>

@@ -17,7 +17,7 @@ const houseCurveHarman = [6.4, 6.4, 6.2, 5.9, 5, 3.8, 2.6, 1.5, 0.9, 0.7, 0.5, 0
 
 // History of user selections
 const outputdBGain = -8 //output gain to prevent clipping
-const amplitudeHistory = Array(frequencyTable.length).fill(0);
+let amplitudeHistory = Array(frequencyTable.length).fill(0);
 
 
 // Get frequency from slider position
@@ -207,7 +207,7 @@ function createGain(dbGain) {
 
 // Play filtered noise --------------
 function playFilteredNoise() {
-  testMode = 2;
+  testMode = 0;
   if (audioContext === undefined) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
@@ -334,14 +334,44 @@ function updateHistoryDisplay() {
 function saveHistory() {
   var fileContent = "* freq(Hz) level(dB)\n";
   amplitudeHistory.forEach((value, index) => {
-    fileContent += `${sliderToFreq(index)} ${-value}\n`
+    fileContent += `${sliderToFreq(index)},${-value}\n`
   });
 
-  var blob = new Blob([fileContent ], { type: 'text/plain' });
+  var blob = new Blob([fileContent ], { type: 'text/csv' });
   var a = document.createElement('a');
-  a.download = 'download.txt';
+  a.download = 'headphone_error.csv';
   a.href = window.URL.createObjectURL(blob);
   a.click();
+}
+
+
+// reload values from file
+function parseCSV(csvText) {
+  return csvText.trim().split('\n').map(line => line.split(',').map(v => v.trim()));
+}
+
+document.getElementById('csv-file-input').addEventListener('change', function(event) {
+  const file = event.target.files[0];
+  console.log('load file');
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const csvData = parseCSV(e.target.result);
+    processCSVData(csvData);
+  };
+  reader.readAsText(file);
+});
+
+function processCSVData(dataArray) {
+  console.log('Headers:', dataArray[0]);
+  const freqData = dataArray.slice(1).map(row => Number(row[0]));
+  const ampData = dataArray.slice(1).map(row => Number(row[1]));
+  // TODO: improve this check and map by frequency
+  if (ampData.length === amplitudeHistory.length) {
+    amplitudeHistory = ampData.slice();
+  }
+  console.log('Data rows:', ampData);
 }
 
 
