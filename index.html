@@ -45,6 +45,19 @@
       min-width: 70px;
       text-align: right;
     }
+    .slider-with-indicator {
+        position: relative;
+        width: 100%;
+        padding-top: 8px;  /* Space for the indicator */
+    }
+    .peak-indicator {
+        position: absolute;
+        top: 0;
+        height: 3px;
+        background-color: #ff0000;
+        opacity: 0.7;
+        pointer-events: none;  /* Allow clicks to pass through */
+    }
     .buttons {
       display: flex;
       justify-content: space-between;
@@ -124,7 +137,18 @@
         <label for="amplitude-slider">Amplitude:</label>
         <span class="slider-value" id="amplitude-value">0 dB</span>
       </div>
-      <input type="range" id="amplitude-slider" min="-12" max="12" value="0" step="1">
+      <div class="slider-with-indicator">
+        <div class="peak-indicator"></div>
+        <input type="range" id="amplitude-slider" min="-18" max="12" value="0" step="1" list="amplitude-ticks">
+        <datalist id="amplitude-ticks">
+          <option value=-18 label="-18"></option>
+          <option value=-12 label="-12"></option>
+          <option value=-6 label="-6&nbsp;"></option>
+          <option value=0 label="0&nbsp;&nbsp;"></option>
+          <option value=6 label="6&nbsp">:</option>
+          <option value=12 label="12"></option>
+        </datalist>
+      </div>
     </div>
     
     <div class="buttons">
@@ -143,6 +167,6 @@
     <h3>Amplitude Table</h3>
     <pre id="history-list"></pre>
   </div>
-  <script src="./iirfilter04.js"></script>
+  <script src="./iirfilter05.js"></script>
 </body>
 </html>

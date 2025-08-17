@@ -4,20 +4,24 @@ let isPlaying = false;
 let loopInterval;
 // chart.js context
 let historyChart = null;
+//let testMode = 0;
 
 // Base 10 reference frequencies (ANSI standard)
 const frequencyTable = [31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 
   800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
-const iso80phonsAlt = [22.8, 21.4, 20.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
+const iso80phonsAlt = [16.8, 16.8, 16.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
   -1.2, -0.9, 1.6, 2.8, -0.3, -3.0, -3.8, -2.6, 0.7, 5.9, 10.5, 10.8, 4.5, 3.8];
 const iso80phons = [28.8, 24.4, 20.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
   -1.2, -0.9, 1.6, 2.8, -0.3, -3.0, -3.8, -2.6, 0.7, 5.9, 10.5, 10.8, 4.5, 3.8];
 const houseCurveHarman = [6.4, 6.4, 6.2, 5.9, 5, 3.8, 2.6, 1.5, 0.9, 0.7, 0.5, 0.4, 0.3, 0.3, 
-  0.1, 0, -0.1, -0.3, -0.4, -0.5, -0.7, -0.9, -1, -1.2, -1.4, -1.6, -1.9, -2.2]
+  0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
 
 // History of user selections
 const outputdBGain = -8 //output gain to prevent clipping
 let amplitudeHistory = Array(frequencyTable.length).fill(0);
+amplitudeHistory.slice(0, 6).forEach((_, ix) => {
+  amplitudeHistory[ix] = -6;
+});
 
 
 // Get frequency from slider position
@@ -61,12 +65,32 @@ function createFrequencyTicks() {
 }
 
 // Audio processing -------- 
+function dBValue(value) {
+  return 20*Math.log10(value);
+}
+
+let calculateRMS = (arr) => Math.sqrt(
+    arr.map( val => (val * val))
+      .reduce((acum, val) => acum + val )
+    / arr.length
+  );
+
 function deClick(data, nsamp) {
   bufferSize = data.length
   for (let i = 0; i < nsamp; i++) { 
     data[i] = i / nsamp * data[i]
     data[bufferSize - i] = i / nsamp * data[bufferSize - i]
   }
+}
+
+function softClip(x) {
+  const abs = Math.abs(x);
+  if (abs > 1) 
+    return 5/6 * Math.sign(x);
+  else if (abs > 0.5)
+    return  x - Math.sign(x) * Math.pow(abs - 0.5, 3) * 1.33333333333;
+  else 
+    return x;
 }
 
 // Create white noise buffer
@@ -83,14 +107,13 @@ function createNoiseBuffer(duration) {
   const bufferSize = sampleRate * duration;
   const buffer = audioContext.createBuffer(1, bufferSize, sampleRate);
   const data = buffer.getChannelData(0);
-  
-  for (let i = 0; i < bufferSize; i++) {
+
+  data.forEach((_, ix) => {
     // avoid Gaussian: higher crest factor
-    // data[i] = approxGaussianRand();
-    rand = Math.random() * 2 - 1;
-    // reduce crest factor
-    data[i] = Math.tanh(rand * 4);
-  }
+    // data[ix] = approxGaussianRand();
+    const rand = Math.random() * 2 - 1;
+    data[ix] = rand; //Math.tanh(rand * 8); // reduce crest factor
+  });
   return buffer;
 }
 
@@ -189,10 +212,21 @@ function createFilteredBuffer(noiseBuffer, frequency) {
   // de-click start stop
   deClick(filteredValues, 720);
 
+  // compute RMS and Peak
+  const RMS = calculateRMS(filteredValues.slice(720, -720));
+  let peak = Math.max.apply(null, filteredValues.slice(0,-1).map(x => Math.abs(x)));
+  const crestFactor = dBValue(peak / RMS);
+  const RMSGain = 0.1 / RMS; // -20dB RMS target
+  peak *= RMSGain;
+
+  let nanCount = 0;
   // Copy filtered values to buffer
-  for (let i = 0; i < filteredValues.length; i++) {
-    filteredData[i] = filteredValues[i];
-  }
+  filteredValues.forEach((value, i) => {
+    filteredData[i] = (RMSGain * value);
+    if (isNaN(value)) {nanCount += 1;}
+  });
+  
+  console.log(`f: ${frequency}, peak: ${dBValue(peak)}, crest: ${crestFactor}, RMS: ${dBValue(RMS)}`)
   return filteredBuffer;
 }
 
@@ -207,7 +241,7 @@ function createGain(dbGain) {
 
 // Play filtered noise --------------
 function playFilteredNoise() {
-  testMode = 0;
+  let testMode = 0;
   if (audioContext === undefined) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
@@ -225,15 +259,15 @@ function playFilteredNoise() {
     if (!isPlaying) return;
 
     const variableFreqIndex = document.getElementById('frequency-slider').value;
-    const variableFreq = sliderToFreq(variableFreqIndex)
-    const pinkNoiseGain = frequencyTable.indexOf(500) - variableFreqIndex
+    const variableFreq = sliderToFreq(variableFreqIndex);
+    const pinkNoiseGain = frequencyTable.indexOf(500) - variableFreqIndex;
     
     // Create gain nodes
     const variableDbGain = parseFloat(document.getElementById('amplitude-slider').value);
-    let playbackGain = variableDbGain + pinkNoiseGain 
-    if (testMode === 2) { 
-      playbackGain += iso80phons[variableFreqIndex] - houseCurveHarman[variableFreqIndex]
-    };
+    let playbackGain = variableDbGain; // + pinkNoiseGain;
+    if (testMode != 2) { 
+      playbackGain += iso80phonsAlt[variableFreqIndex] - houseCurveHarman[variableFreqIndex];
+    }
     const variableGain = createGain(playbackGain + outputdBGain);
     const fixedGain = createGain(outputdBGain); // Fixed gain
     
@@ -281,6 +315,29 @@ function stopAudio() {
   document.getElementById('stop-button').disabled = true;
 }
 
+
+// ---------- Plot, I/O ---------------------------------------------------
+// Peak indicator on Amplitude slider
+function updatePeakIndicator(peakValue) {
+    const indicator = document.querySelector('.peak-indicator');
+    const slider = document.getElementById('amplitude-slider');
+    const sliderRect = slider.getBoundingClientRect();
+    
+    // Convert dB value to slider position percentage
+    const sliderMin = parseFloat(slider.min);
+    const sliderMax = parseFloat(slider.max);
+    const sliderRange = sliderMax - sliderMin;
+    
+    // Calculate position percentage
+    let peakPosition = ((peakValue - sliderMin) / sliderRange) * 100;
+    peakPosition = Math.min(100, peakPosition);
+    
+    // Set indicator position and width
+    indicator.style.left = `${peakPosition}%`;
+    indicator.style.width = `${100 - peakPosition}%`;
+}
+// Example usage:
+// updateCutoffIndicator(6);  // Shows red bar from 6dB to 12dB
 
 // Plot frequency response
 function drawHistoryPlot() {
@@ -366,16 +423,19 @@ document.getElementById('csv-file-input').addEventListener('change', function(ev
 function processCSVData(dataArray) {
   console.log('Headers:', dataArray[0]);
   const freqData = dataArray.slice(1).map(row => Number(row[0]));
-  const ampData = dataArray.slice(1).map(row => Number(row[1]));
+  let ampData = dataArray.slice(1).map(row => Number(row[1]));
+  // load error table, inverse of freq. response
+  ampData = ampData.map(x => -x);
   // TODO: improve this check and map by frequency
   if (ampData.length === amplitudeHistory.length) {
     amplitudeHistory = ampData.slice();
   }
   console.log('Data rows:', ampData);
+  drawHistoryPlot()
 }
 
 
-// Initialize the app ---------- 
+// ---------- Initialize the app ----------------------------------- 
 function init() {
   // Set up frequency slider
   const freqSlider = document.getElementById('frequency-slider');
@@ -403,6 +463,9 @@ function init() {
     ampValue.textContent = `${ampSlider.value} dB`;
     // update AmpSlider
     updateAmpSliderState(freq);
+    // update peak Indicator. peaks are at -10dB
+    const playbackGain = outputdBGain + iso80phonsAlt[freqSlider.value] - houseCurveHarman[freqSlider.value];
+    updatePeakIndicator(10 - playbackGain);
   });
   
   // Set initial value to 1kHz
@@ -412,6 +475,7 @@ function init() {
   // Set up amplitude slider
   const ampSlider = document.getElementById('amplitude-slider');
   const ampValue = document.getElementById('amplitude-value');
+  updatePeakIndicator(12);
   
   ampSlider.addEventListener('input', () => {
     if (!ampSlider.disabled){
