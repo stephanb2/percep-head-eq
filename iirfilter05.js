@@ -11,14 +11,11 @@ const frequencyTable = [31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400,
   800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
 const iso80phonsAlt = [21.8, 20.8, 18.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
   -1.2, -0.9, 1.6, 2.8, -0.3, -3.0, -3.8, -2.6, 0.7, 5.9, 10.5, 10.8, 4.5, 3.8];
-const iso80phonsAlt02 = [16.8, 16.8, 16.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
-  -1.2, -0.9, 1.6, 2.8, -0.3, -3.0, -3.8, -2.6, 0.7, 5.9, 10.5, 10.8, 4.5, 3.8];
 const iso80phons = [28.8, 24.4, 20.8, 17.5, 14.3, 11.6, 9.2, 6.9, 5.0, 3.4, 2.0, 0.8, 0.0, -0.7, 
   -1.2, -0.9, 1.6, 2.8, -0.3, -3.0, -3.8, -2.6, 0.7, 5.9, 10.5, 10.8, 4.5, 3.8];
 const houseCurveHarman = [6.4, 6.4, 6.2, 5.9, 5, 3.8, 2.6, 1.5, 0.9, 0.7, 0.5, 0.4, 0.3, 0.3, 
   0.1, 0, -0.1, -0.3, -0.4, -0.5, -0.7, -0.9, -1, -1.2, -1.4, -1.6, -1.9, -2.2]
-const houseCurveHarman02 = [6.4, 6.4, 6.2, 5.9, 5, 3.8, 2.6, 1.5, 0.9, 0.7, 0.5, 0.4, 0.3, 0.3, 
-  0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
+
 
 // History of user selections
 const outputdBGain = -8 //output gain to prevent clipping
@@ -254,7 +251,7 @@ function playFilteredNoise() {
   document.getElementById('play-button').disabled = true;
   document.getElementById('stop-button').disabled = false;
   
-  const sampleDuration = 0.9;
+  const sampleDuration = 1.0;
   // Create noise buffer and fixed filter noise
   const noiseBuffer = createNoiseBuffer(sampleDuration);
   const fixedFilterBuffer = createFilteredBuffer(noiseBuffer, 500);
