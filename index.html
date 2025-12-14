@@ -19,9 +19,9 @@
       color: #333;
     }
     h1 {
-      text-align: center;
-      color: #2c2e50;
-      font-size: 1.5em;
+      text-align: left;
+      color: #002e50;
+      font-size: 1.2em;
     }
     .controls {
       background-color: white;
@@ -102,6 +102,7 @@
       padding: 20px;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
     }
     .history h2 {
       margin-top: 0;
@@ -123,7 +124,7 @@
   <!--<h1>Frequency Response Test</h1>-->
   
   <div class="controls">
-    <h3>Frequency Response Test</h3>
+    <h1>Frequency Test</h1>
     <div class="slider-container">
       <div class="label-value-row">
         <label for="frequency-slider">Center Frequency:</label>
@@ -162,13 +163,33 @@
         <label for="csv-file-input">Load Table</label>
         <input type="file" id="csv-file-input" accept="text/csv" style="display:none;"/>
       </button>
+      <button onclick="location.href='#help'" type="button">Help</button>
     </div>
   </div>
 
   <div class="history">
+    <h1>Frequency Response</h1>
     <canvas id="history-plot" width="500" height="250"></canvas>
-    <h3>Amplitude Table</h3>
+    <h1>Amplitude Error</h1>
     <pre id="history-list"></pre>
+  </div>
+
+  <div class="history">
+    <section id="help">
+      <h1>Instructions</h1>
+    </section>
+    <p style="color:red;">WARNING: Clipping can occur when the amplitude slider is moved past the red bar. This can damage your speakers and your hearing when played at high volume.</p>
+
+    <p>You will hear tones alternating with a reference at 500Hz. Your goal is to move the amplitude slider so that both tones appear of equal loudness. Move the frequency slider and try to cover all the values. If you miss a frequency, it will become apparent as a jump in the frequency response graph.</p>
+
+    <p>At the extremes of low and high frequency you may not be able to apply a correction, either due to hearing loss, or performance of the headphones, and you can leave the slider on zero.</p>
+
+    <p>This version outputs an error file that you can import into <a href="https://www.roomeqwizard.com/">Room EQ Wizard</a> to create an equaliser definition, as you would from a speaker/room response measurement.</p>
+
+    <p>This tool is a much simplified variant of David Griesinger's <a href="http://www.davidgriesinger.com/">DGSonicFocus</a> application.</p>
+
+    <p>Source code: <a href="https://github.com/stephanb2/percep-head-eq">GitHub</a>
+    <p><a href="#">Top</a></p>
   </div>
   <script src="./iirfilter05.js"></script>
 </body>

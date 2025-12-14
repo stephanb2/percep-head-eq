@@ -4,7 +4,8 @@ let isPlaying = false;
 let loopInterval;
 // chart.js context
 let historyChart = null;
-//let testMode = 0;
+let activeAudioNodes = [];
+
 
 // Base 10 reference frequencies (ANSI standard)
 const frequencyTable = [31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 
@@ -286,6 +287,10 @@ function playFilteredNoise() {
     fixedSource.connect(fixedGain);
     fixedGain.connect(audioContext.destination);
 
+    // Track all nodes for cleanup ***
+    const currentNodes = [variableSource, fixedSource, variableGain, fixedGain];
+    activeAudioNodes.push(...currentNodes);
+
     // Start sounds
     const currentTime = audioContext.currentTime;
     if (testMode > 0) {
@@ -297,6 +302,7 @@ function playFilteredNoise() {
 
     // Schedule next loop on fixedSource end
     variableSource.onended = function() {
+      cleanupAllAudioNodes();
       if (isPlaying) playSounds();
     };
   }
@@ -305,9 +311,30 @@ function playFilteredNoise() {
   playSounds();
 }
 
+function cleanupAllAudioNodes() {
+  activeAudioNodes.forEach(node => {
+    try {
+      // Stop source nodes if they have a stop method
+      if (node.stop && typeof node.stop === 'function') {
+        node.stop();
+      }
+      // Disconnect all nodes
+      node.disconnect();
+    } catch (e) {
+      // Ignore errors - node may already be stopped/disconnected
+      console.debug('Node cleanup warning:', e.message);
+    }
+  });
+  
+  // Remove these nodes from the active array
+  activeAudioNodes = [];
+}
+
+
 // Stop playing audio
 function stopAudio() {
   isPlaying = false;
+  cleanupAllAudioNodes();
   
   // Update history display
   updateHistoryDisplay();
